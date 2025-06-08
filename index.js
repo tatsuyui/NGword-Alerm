@@ -1,10 +1,9 @@
-//  LINE Bot with NGワード検出 + 応答テンプレート（環境変数対応）
+// index.js
 require("dotenv").config();
-const fs = require("fs");
-const { Client } = require("@line/bot-sdk");
+const { Client, middleware } = require("@line/bot-sdk");
 const express = require("express");
 
-//  LINE設定
+// LINE bot設定
 const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.CHANNEL_SECRET,
@@ -14,72 +13,61 @@ const client = new Client(config);
 const app = express();
 app.use(express.json());
 
-//  NGワードの読み込み（Base64から）
-let ngWords = [];
-try {
-  const base64 = process.env.NGWORDS_BASE64;
-  const jsonStr = Buffer.from(base64, 'base64').toString('utf-8');
-  ngWords = JSON.parse(jsonStr);
-} catch (e) {
-  console.error("❌ NGWORDS_BASE64 読み込み失敗:", e);
-  ngWords = [];
-}
+// NGワード（Base64で保持）
+const ngWords = JSON.parse(Buffer.from(process.env.NGWORDS_BASE64, 'base64').toString('utf-8'));
 
-//  正規化関数（カタカナ→ひらがな、小文字化、記号除去など）
-const normalizeText = (text) => {
-  return text
-    .toLowerCase()
-    .replace(/[！!？?。、・\s]/g, '')
-    .replace(/[ァ-ン]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0x60))
-    .normalize('NFKC');
-};
+// 最終警告時刻のマップ
+const lastWarnings = new Map();
 
-//  最初にマッチしたNG語を返す
-const getMatchedWord = (message, ngWords) => {
-  const normMessage = normalizeText(message);
-  for (const word of ngWords) {
-    if (normMessage.includes(normalizeText(word))) {
-      return word;
-    }
+// 返信テンプレート（環境変数）
+const responseTemplate = process.env.RESPONSE_TEMPLATE;
+const repeatTemplate = process.env.REPEAT_TEMPLATE;
+
+// 応答生成関数
+const buildReplyMessage = (userId, matchedWord) => {
+  const now = Date.now();
+  const lastTime = lastWarnings.get(userId);
+
+  if (lastTime && now - lastTime < 60000) {
+    return repeatTemplate;
   }
-  return null;
+
+  lastWarnings.set(userId, now);
+  return responseTemplate.replace("%WORD%", matchedWord);
 };
 
-//  メッセージテンプレートを生成
-const buildReplyMessage = (matchedWord) => {
-  const template = process.env.RESPONSE_TEMPLATE || "%WORD% は NGワードです。";
-  return template.replace("%WORD%", matchedWord).replace(/\\n/g, "\n");
+// NGワードマッチング
+const matchNGWord = (text) => {
+  const normalized = text.replace(/[！!？?]/g, "").toLowerCase();
+  return ngWords.find(word => normalized.includes(word.replace(/[！!？?]/g, "").toLowerCase()));
 };
 
-//  LINE Webhookエントリポイント
-app.post("/webhook", (req, res) => {
-  Promise.all(req.body.events.map(handleEvent)).then((result) =>
-    res.json(result)
-  );
+// Webhook処理
+app.post("/webhook", middleware(config), (req, res) => {
+  Promise.all(req.body.events.map(handleEvent))
+    .then((result) => res.json(result))
+    .catch((err) => {
+      console.error(err);
+      res.status(500).end();
+    });
 });
 
-//  イベント処理
-async function handleEvent(event) {
-  if (event.type !== "message" || event.message.type !== "text") {
-    return null;
-  }
+// イベント処理
+const handleEvent = async (event) => {
+  if (event.type !== "message" || event.message.type !== "text") return null;
+  const text = event.message.text;
+  const match = matchNGWord(text);
+  if (!match) return null;
 
-  const userMessage = event.message.text;
-  const hit = getMatchedWord(userMessage, ngWords);
+  const replyText = buildReplyMessage(event.source.userId, match);
+  return client.replyMessage(event.replyToken, {
+    type: "text",
+    text: replyText,
+  });
+};
 
-  if (hit) {
-    const reply = buildReplyMessage(hit);
-    return client.replyMessage(event.replyToken, {
-      type: "text",
-      text: reply,
-    });
-  }
-
-  return null;
-}
-
-//  サーバー起動
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Bot is running on port ${PORT}`);
+// サーバ起動
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`listening on ${port}`);
 });
