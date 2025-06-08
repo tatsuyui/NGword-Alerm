@@ -48,7 +48,7 @@ const getMatchedWord = (message, ngWords) => {
 // ✅ メッセージテンプレートを生成
 const buildReplyMessage = (matchedWord) => {
   const template = process.env.RESPONSE_TEMPLATE || "%WORD% は NGワードです。";
-  return template.replace("%WORD%", matchedWord);
+  return template.replace("%WORD%", matchedWord).replace(/\\n/g, "\n");
 };
 
 // ✅ LINE Webhookエントリポイント
