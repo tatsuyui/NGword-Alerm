@@ -1,7 +1,8 @@
 // index.js
 require("dotenv").config();
-const { Client, middleware } = require("@line/bot-sdk");
 const express = require("express");
+const bodyParser = require("body-parser");
+const { middleware, Client } = require("@line/bot-sdk");
 
 // LINE bot設定
 const config = {
@@ -11,7 +12,6 @@ const config = {
 
 const client = new Client(config);
 const app = express();
-app.use(express.json());
 
 // NGワード（Base64で保持）
 const ngWords = JSON.parse(Buffer.from(process.env.NGWORDS_BASE64, 'base64').toString('utf-8'));
@@ -43,14 +43,18 @@ const matchNGWord = (text) => {
 };
 
 // Webhook処理
-app.post("/webhook", middleware(config), (req, res) => {
-  Promise.all(req.body.events.map(handleEvent))
-    .then((result) => res.json(result))
-    .catch((err) => {
-      console.error(err);
-      res.status(500).end();
-    });
-});
+app.post("/webhook",
+  bodyParser.json({ verify: (req, res, buf) => { req.rawBody = buf; } }),
+  middleware(config),
+  (req, res) => {
+    Promise.all(req.body.events.map(handleEvent))
+      .then((result) => res.json(result))
+      .catch((err) => {
+        console.error(err);
+        res.status(500).end();
+      });
+  }
+);
 
 // イベント処理
 const handleEvent = async (event) => {
