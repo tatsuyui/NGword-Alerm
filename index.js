@@ -1,10 +1,10 @@
-// ✅ LINE Bot with NGワード検出 + 応答テンプレート（環境変数対応）
+//  LINE Bot with NGワード検出 + 応答テンプレート（環境変数対応）
 require("dotenv").config();
 const fs = require("fs");
 const { Client } = require("@line/bot-sdk");
 const express = require("express");
 
-// ✅ LINE設定
+//  LINE設定
 const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.CHANNEL_SECRET,
@@ -14,7 +14,7 @@ const client = new Client(config);
 const app = express();
 app.use(express.json());
 
-// ✅ NGワードの読み込み（Base64から）
+//  NGワードの読み込み（Base64から）
 let ngWords = [];
 try {
   const base64 = process.env.NGWORDS_BASE64;
@@ -25,7 +25,7 @@ try {
   ngWords = [];
 }
 
-// ✅ 正規化関数（カタカナ→ひらがな、小文字化、記号除去など）
+//  正規化関数（カタカナ→ひらがな、小文字化、記号除去など）
 const normalizeText = (text) => {
   return text
     .toLowerCase()
@@ -34,7 +34,7 @@ const normalizeText = (text) => {
     .normalize('NFKC');
 };
 
-// ✅ 最初にマッチしたNG語を返す
+//  最初にマッチしたNG語を返す
 const getMatchedWord = (message, ngWords) => {
   const normMessage = normalizeText(message);
   for (const word of ngWords) {
@@ -45,20 +45,20 @@ const getMatchedWord = (message, ngWords) => {
   return null;
 };
 
-// ✅ メッセージテンプレートを生成
+//  メッセージテンプレートを生成
 const buildReplyMessage = (matchedWord) => {
   const template = process.env.RESPONSE_TEMPLATE || "%WORD% は NGワードです。";
   return template.replace("%WORD%", matchedWord).replace(/\\n/g, "\n");
 };
 
-// ✅ LINE Webhookエントリポイント
+//  LINE Webhookエントリポイント
 app.post("/webhook", (req, res) => {
   Promise.all(req.body.events.map(handleEvent)).then((result) =>
     res.json(result)
   );
 });
 
-// ✅ イベント処理
+//  イベント処理
 async function handleEvent(event) {
   if (event.type !== "message" || event.message.type !== "text") {
     return null;
@@ -78,8 +78,8 @@ async function handleEvent(event) {
   return null;
 }
 
-// ✅ サーバー起動
+//  サーバー起動
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Bot is running on port ${PORT}`);
+  console.log(`Bot is running on port ${PORT}`);
 });
